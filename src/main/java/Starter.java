@@ -60,7 +60,7 @@ public class Starter {
         System.out.println("Release commit count: " + git.size());
 
         System.out.println();
-        System.out.println("Unknown JIRA issues (does not match commits):");
+        System.out.println("Unknown JIRA issues (does not match commits).");
 
         jira.values().stream()
             .filter(issue -> !git.containsKey(issue.key))
@@ -69,27 +69,26 @@ public class Starter {
 
         System.out.println();
         System.out.println("Release notes to verify:");
-        System.out.println("[Release notes required flag] [Release note] [Commit message] [Jira issue link]");
 
         git.entrySet().stream().map(commit -> {
                 JiraIssue issue = jira.get(commit.getKey());
                 String commitMsg = commit.getValue();
 
                 if (issue == null)
-                    return "[WARN: CHECK ISSUE] commitMsg=" + commitMsg + " https://issues.apache.org/jira/browse/" + commit.getKey();
+                    return "[WARN: CHECK ISSUE] " + commitMsg + " https://issues.apache.org/jira/browse/" + commit.getKey();
 
                 String msg;
 
                 if (issue.releaseNotesRequired && issue.releaseNote.length() == 0)
-                    msg = "[ERROR: NO RELEASE NOTE] commitMsg=" + commitMsg;
+                    msg = "[ERROR: NO RELEASE NOTE] " + commitMsg;
                 else if (!issue.releaseNotesRequired && issue.releaseNote.length() > 0)
                     msg = "[ERROR: NO RELEASE NOTE FLAG]";
                 else if (!issue.releaseNotesRequired && issue.releaseNote.length() == 0)
-                    msg = "[RELEASE NOTES NOT REQUIRED] commitMsg=" + commitMsg + " summary=" + issue.summary;
+                    msg = "[RELEASE NOTES NOT REQUIRED]\n\tcommit: " + commitMsg;
                 else
-                    msg = "[OK] releaseNote=" + issue.releaseNote + " commitMsg=" + commitMsg;
+                    msg = "[OK] " + issue.releaseNote + "\n\tcommit: " + commitMsg;
 
-                msg += " https://issues.apache.org/jira/browse/" + issue.key;
+                msg += " | https://issues.apache.org/jira/browse/" + issue.key + " " + issue.summary;
 
                 return msg;
             })
@@ -102,6 +101,8 @@ public class Starter {
         git.keySet().stream().map(issue -> jira.get(issue))
             .filter(issue -> issue != null && issue.releaseNotesRequired)
             .map(issue -> issue.releaseNote)
+            // Trim.
+            .map(s -> s.trim())
             // Fix dots.
             .map(releaseNote -> releaseNote.endsWith(".") ? releaseNote : releaseNote + '.')
             // Sort alphabetically.
@@ -134,7 +135,7 @@ public class Starter {
 
         if (unknownCommits.size() > 0) {
             System.out.println();
-            System.out.println("Unknown commits (does not match Jira issues):");
+            System.out.println("Unknown commits (does not match Jira issues). Make sure that no jira issue needed.");
             unknownCommits.forEach(commit -> System.out.println(commit.getShortMessage() + " [hash=" + commit.getName() + ']'));
             System.out.println();
         }
