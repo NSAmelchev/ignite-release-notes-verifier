@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URL;
@@ -22,60 +39,107 @@ import org.eclipse.jgit.revwalk.RevCommit;
  * 3. Run {@link #main(String[])}
  */
 public class Starter {
-    /** Jira fix version tag. */
-    public final static String JIRA_FIX_VERSION = "2.12";
-
     /** Ignite git path. */
-    private final static String GIT_PATH = "/Users/home/work/ignite";
+    private final static String GIT_PATH = "/Users/some-user/work/ignite";
+
+    /** Jira fix version tag. */
+    public final static String JIRA_FIX_VERSION = "2.13";
 
     /** Release branch. */
-    private final static String RELEASE_BRANCH = "apache/ignite-2.12";
+    private final static String RELEASE_BRANCH = "apache/ignite-2.13";
 
     /** Previously released branch. */
-    private final static String RELEASED_BRANCH = "apache/ignite-2.11";
+    private final static String RELEASED_BRANCH = "apache/ignite-2.12";
 
     /** */
     public static void main(String[] args) throws Exception {
         Map<String, JiraIssue> jira = jiraIssues();
+        Map<String, String> git = gitIssues();
 
-        System.out.println("Jira issues count = " + jira.size());
+        System.out.println("Jira issues count: " + jira.size());
+        System.out.println("Release commit count: " + git.size());
 
+        System.out.println();
+        System.out.println("Unknown JIRA issues (does not match commits):");
+
+        jira.values().stream()
+            .filter(issue -> !git.containsKey(issue.key))
+            .sorted((i1, i2) -> i1.status.compareTo(i2.status))
+            .forEach(issue -> System.out.println('[' + issue.status + "] " + issue.summary + " https://issues.apache.org/jira/browse/" + issue.key));
+
+        System.out.println();
+        System.out.println("Release notes to verify:");
+        System.out.println("[Release notes required flag] [Release note] [Commit message] [Jira issue link]");
+
+        git.entrySet().stream().map(commit -> {
+                JiraIssue issue = jira.get(commit.getKey());
+                String commitMsg = commit.getValue();
+
+                if (issue == null)
+                    return "[WARN: CHECK ISSUE] commitMsg=" + commitMsg + " https://issues.apache.org/jira/browse/" + commit.getKey();
+
+                String msg;
+
+                if (issue.releaseNotesRequired && issue.releaseNote.length() == 0)
+                    msg = "[ERROR: NO RELEASE NOTE] commitMsg=" + commitMsg;
+                else if (!issue.releaseNotesRequired && issue.releaseNote.length() > 0)
+                    msg = "[ERROR: NO RELEASE NOTE FLAG]";
+                else if (!issue.releaseNotesRequired && issue.releaseNote.length() == 0)
+                    msg = "[RELEASE NOTES NOT REQUIRED] commitMsg=" + commitMsg + " summary=" + issue.summary;
+                else
+                    msg = "[OK] releaseNote=" + issue.releaseNote + " commitMsg=" + commitMsg;
+
+                msg += " https://issues.apache.org/jira/browse/" + issue.key;
+
+                return msg;
+            })
+            .sorted()
+            .forEach(s -> System.out.println(s));
+
+        System.out.println();
+        System.out.println("RELEASE NOTES:");
+
+        git.keySet().stream().map(issue -> jira.get(issue))
+            .filter(issue -> issue != null && issue.releaseNotesRequired)
+            .map(issue -> issue.releaseNote)
+            // Fix dots.
+            .map(releaseNote -> releaseNote.endsWith(".") ? releaseNote : releaseNote + '.')
+            // Sort alphabetically.
+            .sorted()
+            .forEach(releaseNote -> System.out.println(releaseNote));
+    }
+
+    /** */
+    private static Map<String, String> gitIssues() throws Exception {
         Set<RevCommit> commits = releaseCommits();
-
-        System.out.println("Release commit count = " + commits.size());
 
         Pattern reg = Pattern.compile("(IGNITE-\\d+):? (.*)");
 
         List<RevCommit> unknownCommits = new LinkedList<>();
 
-        HashMap<String, String> parsedCommits = new HashMap<>();
+        Map<String, String> parsedCommits = new HashMap<>();
 
         for (RevCommit commit : commits) {
             Matcher matcher = reg.matcher(commit.getShortMessage());
 
             if (matcher.matches()) {
-                String jiraKey = matcher.group(1);
+                String issue = matcher.group(1);
                 String summary = matcher.group(2);
 
-                parsedCommits.put(jiraKey, summary);
+                parsedCommits.put(issue, summary);
             }
             else
                 unknownCommits.add(commit);
         }
 
-        System.out.println();
-        System.out.println("Unknown JIRA issues (does not match commits):");
-        jira.values().stream().filter(issue -> !parsedCommits.containsKey(issue.key))
-            .forEach(issue -> System.out.println("https://issues.apache.org/jira/browse/" + issue.key + " "
-                + issue.summary + " " + issue.status));
+        if (unknownCommits.size() > 0) {
+            System.out.println();
+            System.out.println("Unknown commits (does not match Jira issues):");
+            unknownCommits.forEach(commit -> System.out.println(commit.getShortMessage() + " [hash=" + commit.getName() + ']'));
+            System.out.println();
+        }
 
-        System.out.println();
-        System.out.println("RELEASE NOTES:");
-        parsedCommits.forEach((s, s2) -> System.out.println(s2));
-
-        System.out.println();
-        System.out.println("Unknown commits (does not match Jira issues):");
-        unknownCommits.forEach(commit -> System.out.println(commit.getName() + " " + commit.getShortMessage()));
+        return parsedCommits;
     }
 
     /** @return Release commits. */
@@ -113,8 +177,8 @@ public class Starter {
         URL url = new URL("https://issues.apache.org/jira/rest/api/2/search?" +
             // project=IGNITE AND fixVersion=JIRA_FIX_VERSION
             "jql=project+%3D+IGNITE+AND+fixVersion+%3D+" + JIRA_FIX_VERSION +
-            // exclude documentation issues
-            "%20AND%20(component%20is%20EMPTY%20OR%20component%20not%20in%20(documentation))" +
+            // exclude documentation and extensions issues
+            "%20AND%20(component%20is%20EMPTY%20OR%20component%20not%20in%20(documentation%2C%20extensions))" +
             // max results per page (1000 is max available by API)
             "&maxResults=1000");
 
@@ -132,13 +196,21 @@ public class Starter {
         Map<String, JiraIssue> res = new HashMap<>();
 
         for (JsonNode issue : issues) {
+            boolean releaseNotesRequired = false;
+
+            for (JsonNode flag : issue.get("fields").get("customfield_12313620")) {
+                if (flag.get("value").asText().equals("Release Notes Required"))
+                    releaseNotesRequired = true;
+            }
+
             res.put(
-                issue.get("key").asText(),
+                issue.get("key").textValue(),
                 new JiraIssue(
-                    issue.get("key").asText(),
-                    issue.get("fields").get("summary").asText(),
-                    issue.get("fields").get("status").get("name").asText()
-                )
+                    issue.get("key").textValue(),
+                    issue.get("fields").get("summary").textValue(),
+                    issue.get("fields").get("status").get("name").textValue(),
+                    releaseNotesRequired,
+                    issue.get("fields").get("customfield_12310192").textValue())
             );
         }
 
@@ -160,10 +232,18 @@ public class Starter {
         final String status;
 
         /** */
-        JiraIssue(String key, String summary, String status) {
+        final boolean releaseNotesRequired;
+
+        /** */
+        final String releaseNote;
+
+        /** */
+        JiraIssue(String key, String summary, String status, boolean releaseNotesRequired, String releaseNote) {
             this.key = key;
             this.summary = summary;
             this.status = status;
+            this.releaseNotesRequired = releaseNotesRequired;
+            this.releaseNote = releaseNote == null ? "" : releaseNote;
         }
     }
 }
