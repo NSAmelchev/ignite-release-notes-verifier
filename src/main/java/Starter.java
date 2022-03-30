@@ -84,9 +84,9 @@ public class Starter {
                 else if (!issue.releaseNotesRequired && issue.releaseNote.length() > 0)
                     msg = "[ERROR: NO RELEASE NOTE FLAG]";
                 else if (!issue.releaseNotesRequired && issue.releaseNote.length() == 0)
-                    msg = "[RELEASE NOTES NOT REQUIRED]\n\tcommit: " + commitMsg;
+                    msg = "[NOTES NOT REQUIRED] " + commitMsg;
                 else
-                    msg = "[OK] " + issue.releaseNote + "\n\tcommit: " + commitMsg;
+                    msg = "[OK] " + issue.releaseNote + "\n\t" + commitMsg;
 
                 msg += " | https://issues.apache.org/jira/browse/" + issue.key + " " + issue.summary;
 
