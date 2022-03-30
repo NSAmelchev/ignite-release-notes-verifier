@@ -96,6 +96,15 @@ public class Starter {
             .forEach(s -> System.out.println(s));
 
         System.out.println();
+        System.out.println("[JIRA ONLY RELEASE NOTES]:");
+        jira.entrySet().stream()
+            .filter(entry -> !git.containsKey(entry.getKey()))
+            .map(entry -> entry.getValue())
+            .filter(issue -> issue.releaseNotesRequired && issue.releaseNote.length() > 0)
+            .forEach(issue -> System.out.println(
+                issue.releaseNote + " https://issues.apache.org/jira/browse/" + issue.key + " " + issue.summary));
+
+        System.out.println();
         System.out.println("RELEASE NOTES:");
 
         git.keySet().stream().map(issue -> jira.get(issue))
