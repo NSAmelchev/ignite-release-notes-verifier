@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -106,10 +107,18 @@ public class Starter {
 
         System.out.println();
         System.out.println("RELEASE NOTES:");
-
-        git.keySet().stream().map(issue -> jira.get(issue))
+        Stream.concat(
+            // Git issues.
+            git.keySet().stream().map(issue -> jira.get(issue))
             .filter(issue -> issue != null && issue.releaseNotesRequired)
-            .map(issue -> issue.releaseNote)
+            .map(issue -> issue.releaseNote),
+            // Jira issues.
+            jira.entrySet().stream()
+                .filter(entry -> !git.containsKey(entry.getKey()))
+                .map(entry -> entry.getValue())
+                .filter(issue -> issue.releaseNotesRequired && issue.releaseNote.length() > 0)
+                .map(issue -> issue.releaseNote)
+            )
             // Trim.
             .map(s -> s.trim())
             // Fix dots.
