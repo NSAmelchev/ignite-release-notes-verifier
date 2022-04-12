@@ -125,7 +125,7 @@ public class Starter {
             .map(releaseNote -> releaseNote.endsWith(".") ? releaseNote : releaseNote + '.')
             // Sort alphabetically.
             .sorted()
-            .forEach(releaseNote -> System.out.println(releaseNote));
+            .forEach(releaseNote -> System.out.println("* " + releaseNote));
     }
 
     /** */
