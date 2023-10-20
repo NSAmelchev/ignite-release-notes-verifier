@@ -19,11 +19,13 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,7 +34,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.diff.Edit;
+import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.util.io.NullOutputStream;
 
 /**
  * 1. Use correct versions and paths.
@@ -188,7 +195,44 @@ public class Starter {
         if (res.size() == 0)
             throw new RuntimeException("Bad request.");
 
+        printCommitStatistics(res, git.getRepository());
+
         return res;
+    }
+
+    /** */
+    private static void printCommitStatistics(Set<RevCommit> commits, Repository rep) {
+        Map<Integer, String> stats = new TreeMap<>(Collections.reverseOrder());
+
+        try (DiffFormatter diffFormatter = new DiffFormatter(NullOutputStream.INSTANCE)) {
+            diffFormatter.setRepository(rep);
+
+            commits.forEach(commit -> {
+                try {
+                    int linesAdded = 0;
+                    int linesDeleted = 0;
+
+                    for (DiffEntry entry : diffFormatter.scan(commit.getParent(0), commit)) {
+                        for (Edit edit : diffFormatter.toFileHeader(entry).toEditList()) {
+                            linesDeleted += edit.getEndA() - edit.getBeginA();
+                            linesAdded += edit.getEndB() - edit.getBeginB();
+                        }
+                    }
+
+                    stats.put(linesAdded + linesDeleted, commit.getShortMessage());
+                }
+                catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        System.out.println("Commits statistics:");
+        System.out.println("Lines changed | Commit message");
+
+        stats.forEach((len, msg) -> {
+            System.out.println(len + " | " + msg);
+        });
     }
 
     /** @return Release jira issues (documentation excluded). */
